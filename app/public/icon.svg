@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="RisoRead">
+  <rect width="512" height="512" rx="112" fill="#2f5d50"/>
+  <!-- An open book: two leaves meeting at a gutter, drawn as strokes so the
+       mark stays legible when a launcher renders it at 48px. -->
+  <g fill="none" stroke="#fbfbfa" stroke-width="26" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M256 150c-30-26-76-38-124-38v212c48 0 94 12 124 38"/>
+    <path d="M256 150c30-26 76-38 124-38v212c-48 0-94 12-124 38"/>
+    <path d="M256 150v212"/>
+  </g>
+  <g stroke="#7fc0a8" stroke-width="16" stroke-linecap="round" opacity="0.85">
+    <path d="M172 186h44"/>
+    <path d="M172 236h44"/>
+    <path d="M296 186h44"/>
+    <path d="M296 236h44"/>
+  </g>
+</svg>

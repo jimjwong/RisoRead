@@ -1,0 +1,228 @@
+@import "tailwindcss";
+
+/* RisoDesk — calm density.
+   Academics work long sessions on small type: generous line length, restrained
+   colour, and colour reserved for meaning (card roles, include/exclude). */
+
+:root {
+  --bg:          #fbfbfa;
+  --surface:     #ffffff;
+  --surface-2:   #f4f4f2;
+  --border:      #e3e2de;
+  --border-firm: #cfcec8;
+  --fg:          #1a1a18;
+  --fg-muted:    #6b6a65;
+  --fg-subtle:   #92918b;
+  --accent:      #2f5d50;
+  --accent-fg:   #ffffff;
+  --accent-soft: #e8f0ec;
+
+  --supports:    #2f6b4f;
+  --contradicts: #a8412a;
+  --method:      #4a5a8a;
+  --finding:     #2f5d50;
+  --limitation:  #8a6a2a;
+  --definition:  #5a4a7a;
+  --gap:         #7a5a3a;
+
+  --radius: 8px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg:          #16171a;
+    --surface:     #1d1e22;
+    --surface-2:   #24252a;
+    --border:      #32333a;
+    --border-firm: #45464f;
+    --fg:          #e9e8e4;
+    --fg-muted:    #a3a29c;
+    --fg-subtle:   #7d7c77;
+    --accent:      #7fc0a8;
+    --accent-fg:   #16171a;
+    --accent-soft: #22322d;
+
+    --supports:    #7fc0a8;
+    --contradicts: #e08a72;
+    --method:      #9aa8d8;
+    --finding:     #7fc0a8;
+    --limitation:  #d4b06a;
+    --definition:  #b0a0d8;
+    --gap:         #cfa87e;
+  }
+}
+
+@theme inline {
+  --color-bg:          var(--bg);
+  --color-surface:     var(--surface);
+  --color-surface-2:   var(--surface-2);
+  --color-border:      var(--border);
+  --color-border-firm: var(--border-firm);
+  --color-fg:          var(--fg);
+  --color-fg-muted:    var(--fg-muted);
+  --color-fg-subtle:   var(--fg-subtle);
+  --color-accent:      var(--accent);
+  --color-accent-fg:   var(--accent-fg);
+  --color-accent-soft: var(--accent-soft);
+  --radius-card:       var(--radius);
+}
+
+* { border-color: var(--border); }
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection { background: var(--accent-soft); color: var(--fg); }
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+.prose-measure { max-width: 68ch; }
+
+/* Reader: a highlighted span the user can turn into an Evidence Card. */
+mark.riso-hit {
+  background: var(--accent-soft);
+  color: inherit;
+  padding: 0.1em 0.15em;
+  border-radius: 3px;
+  box-decoration-break: clone;
+}
+
+/*
+ * Book chapters.
+ *
+ * EPUB content arrives with its own structure and no styling of its own that
+ * survives sanitisation, so it needs typography supplied here. Measure is
+ * capped for the same reason a printed page is narrower than the paper: a line
+ * of seventy characters is where the eye stops losing its place.
+ */
+.book-prose {
+  /*
+   * Everything here follows a custom property the server set from the reader's
+   * own settings, with the old fixed value as the fallback — so a chapter still
+   * renders correctly if the variables never arrive.
+   *
+   * The measure is in em rather than rem on purpose: it follows the text size,
+   * so a line holds about the same number of words at every setting. Fixed in
+   * rem, the largest size became four words a line on a phone.
+   */
+  max-width: var(--reading-measure, 34em);
+  margin-inline: auto;
+  font-size: var(--reading-size, 1.0625rem);
+  line-height: var(--reading-leading, 1.75);
+  font-family: var(--reading-face, inherit);
+  color: var(--reading-fg, var(--fg));
+}
+.book-prose p { margin-block: 0.9em; }
+.book-prose h1, .book-prose h2, .book-prose h3, .book-prose h4 {
+  font-weight: 600;
+  line-height: 1.3;
+  margin-block: 1.6em 0.6em;
+}
+.book-prose h1 { font-size: 1.5rem; }
+.book-prose h2 { font-size: 1.25rem; }
+.book-prose h3 { font-size: 1.1rem; }
+.book-prose blockquote {
+  margin-inline: 0;
+  padding-inline-start: 1rem;
+  border-inline-start: 2px solid var(--border-firm);
+  color: var(--reading-muted, var(--fg-muted));
+}
+.book-prose img { max-width: 100%; height: auto; display: block; margin-inline: auto; }
+.book-prose figure { margin-inline: 0; }
+.book-prose figcaption { font-size: 0.85rem; color: var(--reading-muted, var(--fg-muted)); text-align: center; }
+.book-prose ul, .book-prose ol { padding-inline-start: 1.4em; margin-block: 0.9em; }
+.book-prose li { margin-block: 0.3em; }
+.book-prose hr { border: 0; border-top: 1px solid var(--border); margin-block: 2em; }
+.book-prose table { width: 100%; border-collapse: collapse; margin-block: 1.2em; font-size: 0.95em; }
+.book-prose th, .book-prose td { border: 1px solid var(--border); padding: 0.4em 0.6em; text-align: start; }
+.book-prose pre { overflow-x: auto; background: var(--surface-2); padding: 0.8em; border-radius: var(--radius); }
+
+/*
+ * Dragging a book onto a folder.
+ *
+ * The shelf and the folder rail are server-rendered. "A drag is in progress" is
+ * one attribute on <body>, so every drop target lights up from a single write;
+ * the one under the pointer is marked individually, because CSS cannot compare
+ * two attributes and :hover does not exist on a touchscreen at all.
+ */
+[data-book-id] {
+  cursor: grab;
+  /*
+   * Panning stays available so the shelf can be scrolled by swiping across a
+   * cover, which is most of the shelf. The drag suppresses scrolling itself
+   * once the long press has fired. `manipulation` also drops the 300ms
+   * double-tap delay, so opening a book feels immediate.
+   */
+  touch-action: manipulation;
+  -webkit-touch-callout: none;
+}
+[data-book-id]:active { cursor: grabbing; }
+
+body[data-dragging-book] [data-drop-folder] {
+  outline: 1px dashed color-mix(in srgb, var(--accent) 45%, transparent);
+  outline-offset: 2px;
+  border-radius: 999px;
+}
+
+[data-drop-folder][data-over="true"] {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  outline: 1px solid var(--accent);
+}
+
+/* The book in hand. Offset up and left of the finger so it is not underneath it. */
+.book-drag-ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 60;
+  max-width: 11rem;
+  margin: -3.25rem 0 0 -2.5rem;
+  padding: 0.4rem 0.7rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--accent);
+  background: var(--surface);
+  color: var(--fg);
+  font-size: 0.75rem;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.18);
+  /* Never the top element at elementFromPoint, or it would be its own target. */
+  pointer-events: none;
+}
+
+body[data-dragging-book] {
+  /* Stops the pull-to-refresh gesture ending the drag on Android. */
+  overscroll-behavior: contain;
+}
+
+/*
+ * The tap strips down the sides of the reader.
+ *
+ * Invisible until touched, and then only just: a page turn is confirmed by the
+ * page changing, so anything more than a hint here is a flash on every tap.
+ * They carry no background of their own, which is what lets the page underneath
+ * be seen through the full height of the strip.
+ */
+.reader-zone {
+  z-index: 20;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 120ms ease-out;
+}
+.reader-zone:active {
+  background-color: color-mix(in srgb, var(--fg) 6%, transparent);
+}
+@media (hover: hover) {
+  .reader-zone:hover {
+    background-color: color-mix(in srgb, var(--fg) 3%, transparent);
+  }
+}

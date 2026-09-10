@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="RisoRead">
+  <!-- Maskable: a launcher may crop this to a circle, so the ground is edge to
+       edge with no radius, and the mark sits inside the central 80% safe zone. -->
+  <rect width="512" height="512" fill="#2f5d50"/>
+  <g transform="translate(256 256) scale(0.76) translate(-256 -256)">
+    <g fill="none" stroke="#fbfbfa" stroke-width="26" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M256 150c-30-26-76-38-124-38v212c48 0 94 12 124 38"/>
+      <path d="M256 150c30-26 76-38 124-38v212c-48 0-94 12-124 38"/>
+      <path d="M256 150v212"/>
+    </g>
+    <g stroke="#7fc0a8" stroke-width="16" stroke-linecap="round" opacity="0.85">
+      <path d="M172 186h44"/>
+      <path d="M172 236h44"/>
+      <path d="M296 186h44"/>
+      <path d="M296 236h44"/>
+    </g>
+  </g>
+</svg>

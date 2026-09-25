@@ -16,6 +16,7 @@ import {
   deleteAccount,
 } from "./actions";
 import { UsagePanels } from "./usage-panels";
+import { OfflineDownloads } from "./offline-downloads";
 
 export const dynamic = "force-dynamic";
 
@@ -58,7 +59,7 @@ export default async function SettingsPage({
   const year = usage ? await activityYear(user.id) : null;
 
   return (
-    <Shell breadcrumb="Settings">
+    <Shell breadcrumb="Settings" userId={user.id}>
       <div className="mb-6">
         <h1 className="text-lg font-semibold tracking-tight">Settings</h1>
         <p className="mt-1 text-sm text-[var(--fg-muted)]">
@@ -295,6 +296,8 @@ export default async function SettingsPage({
               book downloads today; a bulk download is not built.
             </p>
           </Card>
+
+          <OfflineDownloads userId={user.id} />
 
           <Card className="p-4">
             <h2 className="mb-1 text-sm font-medium">One account, two applications</h2>

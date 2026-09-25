@@ -11,6 +11,7 @@
  *   npm run dev:remote -- 100.x.y.z # or name it explicitly
  *   npm run dev:remote -- 100.x.y.z --port 4000
  *   npm run dev:remote -- --prod    # production build (see below)
+ *   npm run dev:remote -- --https   # front dev mode with a real cert (see below)
  *
  * Use --prod when testing on a phone over plain http.
  *
@@ -20,9 +21,20 @@
  * every button on it is dead. Desktop hides this because localhost counts as
  * secure. A production build ships no dev overlay and has the problem nowhere.
  *
- * The real fix is https. Tailscale issues certs for .ts.net names once you
- * enable HTTPS Certificates in the admin console, after which
- * `tailscale serve --bg --https=443 3210` gives a proper secure origin.
+ * --https is the other fix, and the one that keeps dev mode (HMR, the error
+ * overlay) working over the tailnet instead of trading it away. It shells out
+ * to `tailscale serve --bg --https=443 <port>`, which needs both Tailscale's
+ * HTTPS Certificates *and* Serve enabled for this tailnet — the admin console,
+ * not something this script can turn on. If either is off, the command prints
+ * exactly what to enable and this script falls back to the plain http banner
+ * rather than failing the whole run.
+ *
+ * A secure origin alone does not make dev mode's own JS chunks load, though:
+ * Next 16 blocks cross-origin requests for `/_next/static/chunks/*` and the
+ * HMR socket by default, silently, from any Origin not in `allowedDevOrigins`
+ * (next.config.ts) — the symptom is identical to the crypto problem above
+ * (page renders, nothing hydrates), which makes the two easy to conflate.
+ * Fixing one without the other still leaves every button dead.
  */
 
 import { spawn, spawnSync, execSync } from "node:child_process";
@@ -35,6 +47,7 @@ const explicit = args.find((a) => /^\d+\.\d+\.\d+\.\d+$/.test(a));
 const portFlag = args.indexOf("--port");
 const port = portFlag !== -1 ? args[portFlag + 1] : "3210";
 const prod = args.includes("--prod");
+const useHttps = args.includes("--https");
 
 /**
  * Tailscale hands out addresses in 100.64.0.0/10 (CGNAT). Prefer that over a
@@ -78,6 +91,46 @@ if (!host) {
 }
 
 const supabaseUrl = `http://${host}:54321`;
+
+/**
+ * Front this machine's dev server with a real TLS cert, on the port Tailscale
+ * reserves for it (443) rather than this app's own port — `tailscale serve`
+ * is a reverse proxy, not a port forward, so the app keeps listening wherever
+ * `--port` said and this just adds a path to it that happens to be secure.
+ *
+ * Best-effort: either prerequisite being off (HTTPS Certificates, or Serve
+ * itself, both tailnet-wide settings only the admin console can change) makes
+ * `tailscale serve` fail with a message telling you exactly what to enable —
+ * printed here rather than swallowed, then treated as "not available this
+ * run" so the rest of dev:remote still works over plain http.
+ */
+function enableHttpsServe(targetPort) {
+  const result = spawnSync("tailscale", ["serve", "--bg", `--https=443`, targetPort], {
+    encoding: "utf8",
+  });
+  if (result.status !== 0 || result.error) {
+    console.log(
+      (result.stdout ?? "") + (result.stderr ?? "") ||
+        "  Could not reach the tailscale CLI — is it installed and running?\n",
+    );
+    return null;
+  }
+
+  const statusResult = spawnSync("tailscale", ["status", "--json"], { encoding: "utf8" });
+  if (statusResult.status !== 0) return null;
+  try {
+    const dnsName = JSON.parse(statusResult.stdout).Self?.DNSName;
+    // MagicDNS names come back with a trailing dot (valid in DNS, not in a URL).
+    return dnsName ? `https://${dnsName.replace(/\.$/, "")}` : null;
+  } catch {
+    return null;
+  }
+}
+
+const httpsUrl = useHttps ? enableHttpsServe(port) : null;
+if (useHttps && !httpsUrl) {
+  console.log("  Continuing over plain http — see the message above for what to enable.\n");
+}
 
 // A per-start marker, shown small on the login page. When you're testing on a
 // phone you can't open devtools on, "is this actually the new build?" is the
@@ -151,13 +204,19 @@ function cleanup() {
   } catch {
     // Nothing to do — the file is gitignored and rewritten on every run.
   }
+  if (httpsUrl) {
+    // The serve config is a machine-wide Tailscale setting, not this
+    // process's own state — left running, it would keep proxying 443 at a
+    // dev server that no longer exists on the next `tailscale serve status`.
+    spawnSync("tailscale", ["serve", "--https=443", "off"]);
+  }
 }
 process.on("exit", cleanup);
 
 console.log(`
   RisoDesk — remote dev
 
-    App        http://${host}:${port}
+    App        ${httpsUrl ?? `http://${host}:${port}`}${httpsUrl ? `\n               (also reachable, insecurely, at http://${host}:${port})` : ""}
     Supabase   ${supabaseUrl}
     Studio     http://${host}:54323
 

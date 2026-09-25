@@ -146,6 +146,42 @@ mark.riso-hit {
 .book-prose pre { overflow-x: auto; background: var(--surface-2); padding: 0.8em; border-radius: var(--radius); }
 
 /*
+ * The wide-screen spread is deliberately a reading mode, not two narrow CSS
+ * columns on a long web page. A fixed-height article fills pages from top to
+ * bottom, then creates the next pair to the right. The existing turn controls
+ * move one viewport (one spread) at a time before advancing the EPUB chapter.
+ */
+@media (min-width: 900px) {
+  [data-reader-scroll-container][data-page-layout="spread"] {
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-behavior: smooth;
+    scrollbar-width: thin;
+  }
+
+  [data-reader-scroll-container][data-page-layout="spread"] > [data-reader-surface] {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 100%;
+    height: 100%;
+    overflow: visible;
+  }
+
+  [data-reader-surface][data-page-layout="spread"] .book-prose {
+    width: 100%;
+    max-width: none;
+    height: 100%;
+    margin: 0;
+    column-count: 2;
+    column-fill: auto;
+    column-gap: clamp(3rem, 7vw, 7rem);
+    column-rule: 1px solid color-mix(in srgb, var(--fg) 10%, transparent);
+    orphans: 3;
+    widows: 3;
+  }
+}
+
+/*
  * Dragging a book onto a folder.
  *
  * The shelf and the folder rail are server-rendered. "A drag is in progress" is
@@ -221,8 +257,64 @@ body[data-dragging-book] {
 .reader-zone:active {
   background-color: color-mix(in srgb, var(--fg) 6%, transparent);
 }
+
+.reader-page-zone {
+  z-index: 30;
+  display: flex;
+  width: clamp(3rem, 7vw, 5.5rem);
+  align-items: center;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 120ms ease-out;
+}
+
+.reader-page-zone--previous {
+  justify-content: flex-start;
+  padding-left: clamp(0.35rem, 1vw, 0.8rem);
+}
+
+.reader-page-zone--next {
+  justify-content: flex-end;
+  padding-right: clamp(0.35rem, 1vw, 0.8rem);
+}
+
+.reader-page-bar {
+  width: 0.22rem;
+  height: clamp(4.25rem, 12vh, 7rem);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--reading-muted, var(--fg-muted)) 62%, transparent);
+  box-shadow: 0 1px 5px rgb(0 0 0 / 0.08);
+  opacity: 0.54;
+  transition: opacity 120ms ease-out, transform 120ms ease-out, background-color 120ms ease-out;
+}
+
+.reader-page-zone:active {
+  background: color-mix(in srgb, var(--fg) 3%, transparent);
+}
+
+.reader-page-zone:active .reader-page-bar {
+  opacity: 1;
+  transform: scaleY(1.08);
+  background: var(--accent);
+}
+
 @media (hover: hover) {
   .reader-zone:hover {
     background-color: color-mix(in srgb, var(--fg) 3%, transparent);
+  }
+  .reader-page-zone:hover .reader-page-bar {
+    opacity: 0.9;
+    transform: scaleY(1.05);
+  }
+}
+
+@media (max-width: 640px) {
+  .reader-page-zone {
+    width: 3.25rem;
+  }
+
+  .reader-page-bar {
+    width: 0.2rem;
+    height: 4.5rem;
+    opacity: 0.46;
   }
 }

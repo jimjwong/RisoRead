@@ -66,6 +66,25 @@ export function ReaderComfort({
         </>
       ) : (
         <>
+          <Group label="Pages">
+            <Choice
+              name="layout"
+              value="single"
+              current={prefs.layout}
+              returnTo={returnTo}
+              label="1 page"
+              title="Single page with vertical scrolling"
+            />
+            <Choice
+              name="layout"
+              value="spread"
+              current={prefs.layout}
+              returnTo={returnTo}
+              label="2 pages"
+              title="Two-page spread on wide screens"
+            />
+          </Group>
+
           <Group label="Text">
             {TEXT_SIZES.map((t) => (
               <Choice

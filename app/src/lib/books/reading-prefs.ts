@@ -69,6 +69,7 @@ export const ZOOMS = [100, 125, 150, 200, 300] as const;
 export type Fit = "width" | "page";
 export type Face = keyof typeof FACES;
 export type Tint = keyof typeof TINTS;
+export type PageLayout = "single" | "spread";
 
 export type ReadingPrefs = {
   /** 1..5, an index into TEXT_SIZES. */
@@ -77,6 +78,8 @@ export type ReadingPrefs = {
   measure: number;
   face: Face;
   tint: Tint;
+  /** Continuous single-column reading, or a paginated two-page desktop spread. */
+  layout: PageLayout;
   /**
    * How a PDF page is sized. "width" fills the column and scrolls, which is
    * what makes a textbook legible on a phone; "page" fits a whole page on
@@ -102,6 +105,7 @@ const SPECS: Record<keyof ReadingPrefs, Spec> = {
   measure: { cookie: "riso_measure", values: MEASURE.map((m) => m.step), fallback: 2, numeric: true },
   face: { cookie: "riso_face", values: Object.keys(FACES), fallback: "serif" },
   tint: { cookie: "riso_tint", values: Object.keys(TINTS), fallback: "paper" },
+  layout: { cookie: "riso_layout", values: ["single", "spread"], fallback: "single" },
   fit: { cookie: "riso_fit", values: ["width", "page"], fallback: "width" },
   zoom: { cookie: "riso_zoom", values: ZOOMS, fallback: 100, numeric: true },
 };
@@ -114,6 +118,7 @@ export const DEFAULT_PREFS: ReadingPrefs = {
   measure: 2,
   face: "serif",
   tint: "paper",
+  layout: "single",
   fit: "width",
   zoom: 100,
 };
@@ -148,6 +153,7 @@ export async function readingPrefs(): Promise<ReadingPrefs> {
     measure: read("measure") as number,
     face: read("face") as Face,
     tint: read("tint") as Tint,
+    layout: read("layout") as PageLayout,
     fit: read("fit") as Fit,
     zoom: read("zoom") as number,
   };

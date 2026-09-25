@@ -11,6 +11,7 @@ import { ingestBook } from "@/lib/books/ingest";
 import { MAX_BOOK_BYTES, MAX_BOOK_FILES, MAX_BATCH_BYTES } from "@/lib/books/limits";
 import { entitlementFor, assertWithin, assertStorage, assertNotSuspended, LimitReached } from "@/lib/billing/entitlements";
 import { PREF_NAMES, validPref, cookieFor } from "@/lib/books/reading-prefs";
+import { recordProgress } from "@/lib/books/progress";
 
 async function requireUser() {
   const supabase = await getSupabaseServerClient();
@@ -114,32 +115,11 @@ export async function saveProgress(formData: FormData): Promise<void> {
 
   const { supabase, user } = await requireUser();
 
-  const { data: book } = await supabase
-    .from("books")
-    .select("id, org_id, location_count")
-    .eq("id", bookId)
-    .maybeSingle();
-  if (!book) redirect("/books");
-
-  const total = (book.location_count as number | null) ?? 0;
-  const at = Math.max(0, Math.min(location, total > 0 ? total - 1 : 0));
-  const percent = total > 1 ? Math.round((at / (total - 1)) * 100) : 0;
-
-  await supabase.from("reading_progress").upsert(
-    {
-      book_id: bookId,
-      user_id: user.id,
-      org_id: book.org_id,
-      location: at,
-      percent,
-      finished_at: percent >= 100 ? new Date().toISOString() : null,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "book_id,user_id" },
-  );
+  const result = await recordProgress(supabase, user.id, bookId, location);
+  if (!result) redirect("/books");
 
   revalidatePath(`/books/${bookId}`);
-  redirect(`/books/${bookId}?at=${at}${focus ? "&focus=1" : ""}`);
+  redirect(`/books/${bookId}?at=${result.at}${focus ? "&focus=1" : ""}`);
 }
 
 export async function addBookmark(formData: FormData): Promise<void> {
@@ -201,6 +181,59 @@ export async function removeBookmark(formData: FormData): Promise<void> {
 
   revalidatePath(`/books/${bookId}`);
   redirect(`/books/${bookId}?at=${at}${focus ? "&focus=1" : ""}`);
+}
+
+/** Add or remove the current location with the same one-tap control. */
+export async function toggleBookmark(formData: FormData): Promise<void> {
+  const bookId = String(formData.get("book_id") ?? "");
+  const requestedLocation = Number(formData.get("location") ?? 0);
+  const focus = String(formData.get("focus") ?? "") === "1";
+  const { supabase, user } = await requireUser();
+
+  const { data: book, error: bookError } = await supabase
+    .from("books")
+    .select("id, org_id, location_count")
+    .eq("id", bookId)
+    .maybeSingle();
+  if (bookError) throw bookError;
+  if (!book) redirect("/books");
+
+  const lastLocation = Math.max(0, Number(book.location_count ?? 1) - 1);
+  const location = Math.max(
+    0,
+    Math.min(Number.isFinite(requestedLocation) ? Math.trunc(requestedLocation) : 0, lastLocation),
+  );
+
+  const { data: existing, error: existingError } = await supabase
+    .from("bookmarks")
+    .select("id")
+    .eq("book_id", bookId)
+    .eq("user_id", user.id)
+    .eq("location", location)
+    .maybeSingle();
+  if (existingError) throw existingError;
+
+  if (existing) {
+    const { error } = await supabase
+      .from("bookmarks")
+      .delete()
+      .eq("id", existing.id)
+      .eq("user_id", user.id);
+    if (error) throw error;
+  } else {
+    const { error } = await supabase.from("bookmarks").insert({
+      book_id: bookId,
+      user_id: user.id,
+      org_id: book.org_id,
+      location,
+      label: null,
+      note: null,
+    });
+    if (error) throw error;
+  }
+
+  revalidatePath(`/books/${bookId}`);
+  redirect(`/books/${bookId}?at=${location}${focus ? "&focus=1" : ""}`);
 }
 
 /**

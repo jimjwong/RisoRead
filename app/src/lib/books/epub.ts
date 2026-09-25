@@ -305,6 +305,21 @@ export function renderChapter(
   });
 }
 
+/**
+ * Resolve and render one entry from the spine, clamping like the reader page
+ * always has — kept here so the reading page and the offline chapter route can
+ * never resolve the same index to two different chapters.
+ */
+export function renderSpineItem(
+  epub: Epub,
+  bytes: Uint8Array,
+  index: number,
+  assetBase: string,
+): string {
+  const item = epub.spine[Math.max(0, Math.min(index, epub.spine.length - 1))];
+  return renderChapter(bytes, item.href, { assetBase });
+}
+
 /** Roughly how long a chapter is, for the reader to show before opening it. */
 export function chapterWords(html: string): number {
   const text = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();

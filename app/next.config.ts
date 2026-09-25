@@ -1,6 +1,21 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Produce the minimal Node server used by the production Docker image.
+  output: "standalone",
+
+  /**
+   * Lets the dev server's own JS chunks and HMR socket load when this
+   * machine is reached over the tailnet rather than localhost. Without this,
+   * Next silently 403s every /_next/static/chunks request whose Origin
+   * header isn't in this list — the page still renders (that part is a
+   * normal request to the page route), but no client bundle ever loads, so
+   * nothing hydrates and every interactive control is dead with no visible
+   * error. Both forms are listed because dev-remote.mjs can serve either the
+   * plain IP or, once fronted by `tailscale serve`, the https hostname.
+   */
+  allowedDevOrigins: ["100.108.176.103", "smallisland-ai.tail94b909.ts.net"],
+
   /**
    * Native modules the bundler must leave alone.
    *

@@ -2,15 +2,21 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
   Bookmark as BookmarkIcon,
-  ChevronLeft,
-  ChevronRight,
+  ChevronDown,
+  ChevronUp,
+  Columns2,
   Maximize2,
   Minimize2,
+  SlidersHorizontal,
 } from "lucide-react";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { BookHeading } from "@/components/book-heading";
 import { BookTags } from "@/components/book-tags";
-import { ReaderGestures } from "@/components/reader-gestures";
+import { ReaderInteractions } from "@/components/reader-interactions";
+import { ReaderBookmarkToggle } from "@/components/reader-bookmark-toggle";
+import { EpubAutoScroll } from "@/components/epub-auto-scroll";
+import { OfflineRegister } from "@/components/offline-register";
+import { SaveOfflineControl } from "@/components/save-offline";
 import { ReaderComfort } from "@/components/reader-controls";
 import { MoveBookControl, FolderLabel } from "@/components/move-book";
 import {
@@ -21,8 +27,9 @@ import {
 import { moveBook } from "../folder-actions";
 import { Button, Card, Shell, Textarea } from "@/components/ui";
 import { getBook, bookUrl } from "@/lib/storage/books";
-import { parseEpub, renderChapter, EpubError } from "@/lib/books/epub";
+import { parseEpub, renderSpineItem, EpubError } from "@/lib/books/epub";
 import { readingPrefs, readingVars } from "@/lib/books/reading-prefs";
+import { recordProgress } from "@/lib/books/progress";
 import { saveProgress, addBookmark, removeBookmark, deleteBook } from "../actions";
 
 export const dynamic = "force-dynamic";
@@ -69,13 +76,21 @@ export default async function ReaderPage({
 
   const supabase = await getSupabaseServerClient();
 
-  const { data: book, error } = await supabase
-    .from("books")
-    .select(
-      "id, title, authors, format, storage_path, cover_path, publisher, published_year, language, isbn, description, subjects, tags, suggested_tags, location_count, size_bytes, folder_id, created_at",
-    )
-    .eq("id", id)
-    .maybeSingle();
+  const [
+    { data: book, error },
+    {
+      data: { user },
+    },
+  ] = await Promise.all([
+    supabase
+      .from("books")
+      .select(
+        "id, title, authors, format, storage_path, cover_path, publisher, published_year, language, isbn, description, subjects, tags, suggested_tags, location_count, size_bytes, folder_id, created_at",
+      )
+      .eq("id", id)
+      .maybeSingle(),
+    supabase.auth.getUser(),
+  ]);
 
   if (error) throw error;
   if (!book) notFound();
@@ -110,29 +125,8 @@ export default async function ReaderPage({
   // note at the top of the file for why a write on a GET is the right trade
   // in this one place.
   if (sp.at !== undefined && at !== savedAt) {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
     if (user) {
-      const { data: owner } = await supabase
-        .from("books")
-        .select("org_id")
-        .eq("id", id)
-        .maybeSingle();
-      if (owner) {
-        await supabase.from("reading_progress").upsert(
-          {
-            book_id: id,
-            user_id: user.id,
-            org_id: owner.org_id,
-            location: at,
-            percent: total > 1 ? Math.round((at / (total - 1)) * 100) : 0,
-            finished_at: at >= total - 1 ? new Date().toISOString() : null,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "book_id,user_id" },
-        );
-      }
+      await recordProgress(supabase, user.id, id, at);
     }
   }
 
@@ -152,6 +146,7 @@ export default async function ReaderPage({
 
   /** Where a preference form comes back to, so changing text size stays put. */
   const returnTo = href(at);
+  const settingsReturnTo = `${returnTo}&settings=1`;
 
   const prefs = await readingPrefs();
 
@@ -167,47 +162,8 @@ export default async function ReaderPage({
   const folderName =
     folders.find((f) => f.id === (book.folder_id as string | null))?.name ?? null;
 
-  // --- Controls, identical for both formats --------------------------------
-  //
-  // Anchors, not forms. A page turn used to be a POST and a redirect; it is now
-  // one request, which is what makes tapping through a book feel like reading
-  // rather than like submitting something.
-  const turn = (
-    href: string | null,
-    direction: "Previous" | "Next",
-    icon: React.ReactNode,
-    /** Hidden in the footer, where there is room for an arrow and nothing else. */
-    showLabel = true,
-  ) => {
-    const label = `${direction} ${unit.toLowerCase()}`;
-    return href ? (
-      <a
-        href={href}
-        rel="nofollow"
-        // The name comes from here rather than from the text, because in the
-        // footer there is no text — an unlabelled arrow either side of a
-        // percentage is two controls a screen reader cannot tell apart.
-        aria-label={label}
-        className="inline-flex min-h-10 items-center gap-1 rounded-md border px-3 text-xs hover:bg-[var(--surface-2)]"
-      >
-        {icon}
-        {showLabel && direction}
-      </a>
-    ) : (
-      <span
-        aria-hidden
-        className="inline-flex min-h-10 items-center gap-1 rounded-md border px-3 text-xs opacity-40"
-      >
-        {icon}
-        {showLabel && direction}
-      </span>
-    );
-  };
-
   const nav = (
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      {turn(prevHref, "Previous", <ChevronLeft size={14} aria-hidden />)}
-
+    <div className="flex items-center justify-center">
       <span className="flex items-center gap-2 text-xs text-[var(--fg-muted)]">
         {bookmarkHere && (
           <BookmarkIcon
@@ -216,10 +172,12 @@ export default async function ReaderPage({
             style={{ color: "var(--accent)" }}
           />
         )}
-        {unit} {at + 1} of {total} · {percent}%
+        {/* Its own span, so an offline turn can update the text without
+            touching the bookmark icon next to it. */}
+        <span data-reader-counter>
+          {unit} {at + 1} of {total} · {percent}%
+        </span>
       </span>
-
-      {turn(nextHref, "Next", <ChevronRight size={14} aria-hidden />)}
     </div>
   );
 
@@ -261,7 +219,7 @@ export default async function ReaderPage({
         ) : (
           <>
             <Maximize2 size={14} aria-hidden />
-            Read
+            Full
           </>
         )}
       </Link>
@@ -307,7 +265,7 @@ export default async function ReaderPage({
             ? zoomed
               ? "overflow-auto"
               : "overflow-hidden"
-            : `rounded-[var(--radius)] border bg-[var(--surface)] ${zoomed ? "overflow-auto" : "overflow-hidden"}`
+            : `bg-[var(--surface)] ${zoomed ? "overflow-auto" : "overflow-hidden"}`
         }
       >
         {/*
@@ -325,6 +283,7 @@ export default async function ReaderPage({
         */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
+          data-reader-image
           src={`/books/${id}/page-image?p=${at + 1}&w=3000`}
           // Every option here is larger than the box it is displayed in, on
           // purpose. A page of a book is read by pinching into it, so sizing
@@ -378,8 +337,7 @@ export default async function ReaderPage({
       const bytes = await getBook(book.storage_path as string);
       if (!bytes) throw new EpubError("This book's file could not be reached.");
       const epub = parseEpub(bytes);
-      const item = epub.spine[Math.min(at, epub.spine.length - 1)];
-      chapterHtml = renderChapter(bytes, item.href, { assetBase: `/books/${id}/asset` });
+      chapterHtml = renderSpineItem(epub, bytes, at, `/books/${id}/asset`);
     } catch (err) {
       failure = err instanceof Error ? err.message : "This book could not be opened.";
     }
@@ -395,7 +353,9 @@ export default async function ReaderPage({
       // ordinary view has no wrapper of its own — and a chapter whose font-size
       // resolves to nothing is a chapter at the browser default.
       <div
-        className={focus ? "px-4 py-6 sm:px-10 sm:py-12" : "rounded-[var(--radius)] border p-5 sm:p-10"}
+        data-reader-surface
+        data-page-layout={prefs.layout}
+        className={focus ? "px-4 py-6 sm:px-10 sm:py-12" : "p-5 sm:p-10"}
         style={{
           ...(readingVars(prefs) as React.CSSProperties),
           background: "var(--reading-bg, var(--surface))",
@@ -415,6 +375,7 @@ export default async function ReaderPage({
           resolve the measure against — the measure is in em.
         */}
         <article
+          data-reader-article
           className="book-prose"
           style={{ fontSize: "var(--reading-size)" }}
           dangerouslySetInnerHTML={{ __html: chapterHtml }}
@@ -425,6 +386,7 @@ export default async function ReaderPage({
 
   const progressBar = (
     <div
+      data-reader-progress
       className="h-1 w-full overflow-hidden rounded-full bg-[var(--surface-2)]"
       role="progressbar"
       aria-valuenow={percent}
@@ -433,6 +395,7 @@ export default async function ReaderPage({
       aria-label="Reading progress"
     >
       <div
+        data-reader-progress-fill
         className="h-full rounded-full"
         style={{ width: `${percent}%`, background: "var(--accent)" }}
       />
@@ -495,6 +458,17 @@ export default async function ReaderPage({
     </ul>
   );
 
+  const spreadStatus = (
+    <div className="inline-flex min-h-9 items-center gap-2 rounded-lg border px-3 text-[11px] text-[var(--fg-muted)]">
+      <Columns2 size={14} aria-hidden />
+      <span className="hidden sm:inline">Two-page spread</span>
+      {bookmarkHere && (
+        <BookmarkIcon size={11} aria-label="Bookmarked" style={{ color: "var(--accent)" }} />
+      )}
+      <span data-reader-percent>{percent}%</span>
+    </div>
+  );
+
   // --- Focus mode: the reading surface -------------------------------------
   //
   // The page is the screen. Everything else is a thin bar at the top and a thin
@@ -508,16 +482,27 @@ export default async function ReaderPage({
       // application's own colours when the tint is "paper" means the reader
       // does not pin itself to a light theme of its own.
       <div
-        className="flex min-h-[100dvh] flex-col"
+        className="flex h-[100dvh] flex-col overflow-hidden"
         style={{
           ...(readingVars(prefs) as React.CSSProperties),
           background: "var(--reading-bg, var(--bg))",
           color: "var(--reading-fg, var(--fg))",
         }}
       >
-        <ReaderGestures prev={prevHref} next={nextHref} />
+        <ReaderInteractions
+          bookId={id}
+          userId={user?.id ?? null}
+          format={isPdf ? "pdf" : "epub"}
+          at={at}
+          total={total}
+          unit={unit}
+          focus={focus}
+        />
+        {/* Focus mode has no Shell around it, so it registers the offline
+            engine itself rather than inheriting it from there. */}
+        <OfflineRegister userId={user?.id ?? null} />
 
-        <header className="flex items-center gap-3 border-b px-3 py-2">
+        <header className="grid shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-b px-3 py-2">
           <Link
             href={`/books/${id}?at=${at}`}
             rel="nofollow"
@@ -526,12 +511,44 @@ export default async function ReaderPage({
           >
             <Minimize2 size={15} aria-hidden />
           </Link>
-          <span className="min-w-0 flex-1 truncate text-xs text-[var(--fg-muted)]">
+          <span className="min-w-0 truncate text-center text-xs font-medium text-[var(--fg-muted)]">
             {book.title}
           </span>
-          <span className="shrink-0 text-xs text-[var(--fg-subtle)] tabular-nums">
-            {at + 1}/{total}
-          </span>
+          <div className="flex items-center gap-1">
+            <span
+              data-reader-header-counter
+              className="mr-1 shrink-0 text-[11px] text-[var(--fg-subtle)] tabular-nums"
+            >
+              {at + 1}/{total}
+            </span>
+            {!isPdf && (
+              <details data-autoclose className="group relative">
+                <summary
+                  className="inline-flex min-h-8 min-w-8 cursor-pointer list-none items-center justify-center rounded-md text-[var(--fg-muted)] hover:bg-[var(--surface-2)] [&::-webkit-details-marker]:hidden"
+                  aria-label="Reading settings"
+                  title="Reading settings"
+                >
+                  <SlidersHorizontal size={16} aria-hidden />
+                </summary>
+                <div className="absolute top-10 right-0 z-40 max-h-[min(70dvh,38rem)] w-[min(28rem,calc(100vw-1.5rem))] overflow-auto rounded-[var(--radius)] border bg-[var(--reading-bg,var(--surface))] p-4 text-left shadow-xl">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <h2 className="text-sm font-medium">Reading settings</h2>
+                    <span className="text-[10px] text-[var(--fg-subtle)]">Layout &amp; type</span>
+                  </div>
+                  <ReaderComfort prefs={prefs} isPdf={false} returnTo={returnTo} compact />
+                </div>
+              </details>
+            )}
+            <ReaderBookmarkToggle
+              bookId={id}
+              initialLocation={at}
+              bookmarks={bookmarks.map(({ id: bookmarkId, location }) => ({
+                id: bookmarkId,
+                location,
+              }))}
+              focus
+            />
+          </div>
         </header>
 
         {/*
@@ -539,24 +556,36 @@ export default async function ReaderPage({
           middle so a passage can still be selected and a diagram pinched into,
           which is the difference between a reader and a slideshow.
         */}
-        <div className="relative flex-1">
-          {body}
+        <div className="relative min-h-0 flex-1">
+          <div
+            data-reader-scroll-container
+            data-page-layout={!isPdf ? prefs.layout : undefined}
+            className="h-full overflow-auto overscroll-contain"
+          >
+            {body}
+          </div>
 
-          {prevHref && (
+          {(prevHref || (!isPdf && prefs.layout === "spread")) && (
             <a
-              href={prevHref}
+              href={prevHref ?? href(at)}
               rel="nofollow"
+              data-turn="prev"
               aria-label={`Previous ${unit.toLowerCase()}`}
-              className="reader-zone absolute inset-y-0 left-0 w-[18%]"
-            />
+              className="reader-page-zone reader-page-zone--previous absolute inset-y-0 left-0"
+            >
+              <span className="reader-page-bar" aria-hidden />
+            </a>
           )}
-          {nextHref && (
+          {(nextHref || (!isPdf && prefs.layout === "spread")) && (
             <a
-              href={nextHref}
+              href={nextHref ?? href(at)}
               rel="nofollow"
+              data-turn="next"
               aria-label={`Next ${unit.toLowerCase()}`}
-              className="reader-zone absolute inset-y-0 right-0 w-[18%]"
-            />
+              className="reader-page-zone reader-page-zone--next absolute inset-y-0 right-0"
+            >
+              <span className="reader-page-bar" aria-hidden />
+            </a>
           )}
         </div>
 
@@ -566,32 +595,42 @@ export default async function ReaderPage({
           paragraph.
         */}
         <footer
-          className="sticky bottom-0 border-t backdrop-blur pb-[env(safe-area-inset-bottom)]"
+          className="shrink-0 border-t backdrop-blur pb-[env(safe-area-inset-bottom)]"
           style={{ background: "var(--reading-bg, var(--surface))" }}
         >
           {progressBar}
 
-          <div className="flex items-center gap-2 px-3 py-2">
-            {turn(prevHref, "Previous", <ChevronLeft size={16} aria-hidden />, false)}
-
-            <div className="min-w-0 flex-1 text-center text-[11px] text-[var(--fg-subtle)]">
-              {bookmarkHere && (
-                <BookmarkIcon
-                  size={11}
-                  className="mr-1 inline"
-                  aria-label="Bookmarked"
-                  style={{ color: "var(--accent)" }}
-                />
+          <div className="flex items-center justify-center px-3 py-2">
+            <div className="flex min-w-0 flex-1 justify-center">
+              {isPdf ? (
+                <div className="text-center text-[11px] text-[var(--fg-subtle)]">
+                  {bookmarkHere && (
+                    <BookmarkIcon
+                      size={11}
+                      className="mr-1 inline"
+                      aria-label="Bookmarked"
+                      style={{ color: "var(--accent)" }}
+                    />
+                  )}
+                  <span data-reader-percent>{percent}%</span>
+                </div>
+              ) : prefs.layout === "single" ? (
+                <EpubAutoScroll bookId={id} percent={percent} bookmarked={Boolean(bookmarkHere)} />
+              ) : (
+                spreadStatus
               )}
-              {percent}%
             </div>
-
-            {turn(nextHref, "Next", <ChevronRight size={16} aria-hidden />, false)}
           </div>
 
-          <details className="border-t">
-            <summary className="cursor-pointer list-none px-3 py-2 text-[11px] opacity-70 select-none">
-              Go to a page, bookmark, or change how this reads
+          <details className="group border-t">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2 text-[11px] opacity-70 select-none">
+              <span>Jump to a {unit.toLowerCase()} or view bookmarks</span>
+              <ChevronUp size={14} className="shrink-0 group-open:hidden" aria-hidden />
+              <ChevronDown
+                size={14}
+                className="hidden shrink-0 group-open:block"
+                aria-hidden
+              />
             </summary>
             <div className="space-y-3 px-3 pb-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -607,8 +646,6 @@ export default async function ReaderPage({
                 </form>
               </div>
 
-              <ReaderComfort prefs={prefs} isPdf={isPdf} returnTo={returnTo} compact />
-
               {bookmarks.length > 0 && <div>{bookmarkList}</div>}
             </div>
           </details>
@@ -620,6 +657,7 @@ export default async function ReaderPage({
   // --- Ordinary view --------------------------------------------------------
   return (
     <Shell
+      userId={user?.id ?? null}
       breadcrumb={
         <Link href="/books" className="hover:text-[var(--fg)]">
           Shelf
@@ -659,16 +697,52 @@ export default async function ReaderPage({
       </div>
 
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-        <ReaderComfort prefs={prefs} isPdf={isPdf} returnTo={returnTo} />
-        {folderOptions.length > 0 && (
-          <MoveBookControl
-            action={moveBook}
+        <details
+          data-autoclose
+          open={sp.settings === "1"}
+          className="group relative z-20"
+        >
+          <summary
+            className="inline-flex min-h-10 min-w-10 cursor-pointer list-none items-center justify-center gap-0.5 rounded-md border text-[var(--fg-muted)] hover:bg-[var(--surface-2)] [&::-webkit-details-marker]:hidden"
+            aria-label="Reading settings"
+            title="Reading settings"
+          >
+            <SlidersHorizontal size={17} aria-hidden />
+            <ChevronDown size={11} className="group-open:hidden" aria-hidden />
+            <ChevronUp size={11} className="hidden group-open:block" aria-hidden />
+            <span className="sr-only">Reading settings</span>
+          </summary>
+          <div className="absolute left-0 mt-2 max-h-[min(65dvh,36rem)] w-[min(48rem,calc(100vw-2rem))] overflow-auto rounded-[var(--radius)] border bg-[var(--surface)] p-4 shadow-xl">
+            <div className="mb-3 flex items-center gap-2">
+              <SlidersHorizontal size={15} aria-hidden />
+              <h2 className="text-sm font-medium">Reading settings</h2>
+            </div>
+            <ReaderComfort
+              prefs={prefs}
+              isPdf={isPdf}
+              returnTo={settingsReturnTo}
+              compact
+            />
+          </div>
+        </details>
+        <div className="flex flex-wrap items-start gap-3">
+          {folderOptions.length > 0 && (
+            <MoveBookControl
+              action={moveBook}
+              bookId={id}
+              returnTo={returnTo}
+              current={(book.folder_id as string | null) ?? null}
+              folders={folderOptions}
+            />
+          )}
+          <SaveOfflineControl
             bookId={id}
-            returnTo={returnTo}
-            current={(book.folder_id as string | null) ?? null}
-            folders={folderOptions}
+            userId={user?.id ?? null}
+            format={isPdf ? "pdf" : "epub"}
+            title={book.title as string}
+            totalUnits={total}
           />
-        )}
+        </div>
       </div>
 
       {resumed && (
@@ -716,15 +790,74 @@ export default async function ReaderPage({
         </Card>
       )}
 
-      <ReaderGestures prev={prevHref} next={nextHref} />
-
-      <div className="mb-3">{progressBar}</div>
-
+      <ReaderInteractions
+        bookId={id}
+        userId={user?.id ?? null}
+        format={isPdf ? "pdf" : "epub"}
+        at={at}
+        total={total}
+        unit={unit}
+        focus={focus}
+      />
       <Card className="mb-3 p-3">{nav}</Card>
 
-      {body}
+      <div className="overflow-hidden rounded-[var(--radius)] border bg-[var(--surface)]">
+        <div className="relative">
+          <div
+            data-reader-scroll-container
+            data-page-layout={!isPdf ? prefs.layout : undefined}
+            className="h-[clamp(20rem,70dvh,48rem)] overflow-auto overscroll-contain"
+          >
+            {body}
+          </div>
 
-      <Card className="mt-3 p-3">{nav}</Card>
+          {(prevHref || (!isPdf && prefs.layout === "spread")) && (
+            <a
+              href={prevHref ?? href(at)}
+              rel="nofollow"
+              data-turn="prev"
+              aria-label={`Previous ${unit.toLowerCase()}`}
+              className="reader-page-zone reader-page-zone--previous absolute inset-y-0 left-0"
+            >
+              <span className="reader-page-bar" aria-hidden />
+            </a>
+          )}
+          {(nextHref || (!isPdf && prefs.layout === "spread")) && (
+            <a
+              href={nextHref ?? href(at)}
+              rel="nofollow"
+              data-turn="next"
+              aria-label={`Next ${unit.toLowerCase()}`}
+              className="reader-page-zone reader-page-zone--next absolute inset-y-0 right-0"
+            >
+              <span className="reader-page-bar" aria-hidden />
+            </a>
+          )}
+        </div>
+
+        <div className="border-t">
+          {progressBar}
+          <div className="p-3">
+            {isPdf ? (
+              nav
+            ) : (
+              <div className="flex items-center justify-center">
+                <div className="flex min-w-0 flex-1 justify-center">
+                  {prefs.layout === "single" ? (
+                    <EpubAutoScroll
+                      bookId={id}
+                      percent={percent}
+                      bookmarked={Boolean(bookmarkHere)}
+                    />
+                  ) : (
+                    spreadStatus
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
 
       <div className="mt-6 grid gap-4 lg:grid-cols-2">
         <BookTags

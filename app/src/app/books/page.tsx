@@ -82,7 +82,10 @@ export default async function BooksPage({
     params.by === "tags" || (params.tag ?? "").trim() ? "tags" : "folders";
 
   const supabase = await getSupabaseServerClient();
-  const orgs = await getMyOrgs();
+  const [orgs, { data: { user } }] = await Promise.all([
+    getMyOrgs(),
+    supabase.auth.getUser(),
+  ]);
 
   let query = supabase
     .from("books")
@@ -171,7 +174,7 @@ export default async function BooksPage({
   });
 
   return (
-    <Shell breadcrumb={orgs[0]?.name ?? "Your shelf"}>
+    <Shell breadcrumb={orgs[0]?.name ?? "Your shelf"} userId={user?.id ?? null}>
       <div className="mb-6">
         <h1 className="text-lg font-semibold tracking-tight">Your shelf</h1>
         <p className="mt-1 max-w-prose text-sm text-[var(--fg-muted)]">

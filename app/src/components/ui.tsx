@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { CloseOnOutsideClick } from "@/components/close-on-outside";
+import { OfflineRegister } from "@/components/offline-register";
 
 export function Card({
   children,
@@ -109,9 +110,12 @@ export function EmptyState({
 export function Shell({
   children,
   breadcrumb,
+  userId = null,
 }: {
   children: ReactNode;
   breadcrumb?: ReactNode;
+  /** Who's signed in, for the offline download engine. See OfflineRegister. */
+  userId?: string | null;
 }) {
   return (
     <div className="min-h-screen">
@@ -153,6 +157,7 @@ export function Shell({
         </div>
       </header>
       <CloseOnOutsideClick />
+      <OfflineRegister userId={userId} />
       <main className="mx-auto max-w-6xl px-4 py-6 sm:px-5 sm:py-8">{children}</main>
     </div>
   );

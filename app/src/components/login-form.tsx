@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useFormStatus } from "react-dom";
 import { Button, Input, Label } from "@/components/ui";
 
@@ -48,7 +49,17 @@ export function LoginFields({ mode }: { mode: Mode }) {
       </div>
 
       <div>
-        <Label htmlFor="password">Password</Label>
+        <div className="flex items-center justify-between gap-3">
+          <Label htmlFor="password">Password</Label>
+          {mode === "signin" && (
+            <Link
+              href="/forgot-password"
+              className="mb-1.5 text-xs font-medium text-[var(--accent)] hover:underline"
+            >
+              Forgot password?
+            </Link>
+          )}
+        </div>
         <Input
           id="password"
           name="password"

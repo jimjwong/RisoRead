@@ -14,6 +14,10 @@ const ERRORS: Record<string, string> = {
   unknown: "Something went wrong. Try again.",
 };
 
+const NOTICES: Record<string, string> = {
+  "password-reset": "Password changed. Sign in with your new password.",
+};
+
 /**
  * Mode and errors both live in the URL, and the form posts to a Server Action.
  *
@@ -26,11 +30,12 @@ const ERRORS: Record<string, string> = {
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ mode?: string; error?: string }>;
+  searchParams: Promise<{ mode?: string; error?: string; notice?: string }>;
 }) {
-  const { mode: rawMode, error: rawError } = await searchParams;
+  const { mode: rawMode, error: rawError, notice: rawNotice } = await searchParams;
   const mode: Mode = rawMode === "signup" ? "signup" : "signin";
   const error = rawError ? (ERRORS[rawError] ?? ERRORS.unknown) : null;
+  const notice = rawNotice ? NOTICES[rawNotice] : null;
 
   const tabs: { mode: Mode; label: string }[] = [
     { mode: "signin", label: "Sign in" },
@@ -89,6 +94,15 @@ export default async function LoginPage({
               >
                 {otherMode === "signup" ? "Create one" : "Sign in instead"}
               </Link>
+            </div>
+          )}
+
+          {notice && (
+            <div
+              role="status"
+              className="border-b px-6 py-3 text-sm text-[var(--supports)]"
+            >
+              {notice}
             </div>
           )}
 
